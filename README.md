@@ -44,3 +44,19 @@ This is a multi-module project, build the JAR files for both microservices :
 
 # Build Consumer Service
 ./gradlew.bat clean :consumer-service:app:build -x test
+
+# Start the entire infrastructure (Kafka, Apps, Database, Monitoring) with one command
+docker-compose up --build
+
+
+Service,URL,Credentials
+Frontend Store: http://localhost:5173
+Grafana Dashboards: http://localhost:3000,User: admin / Pass: admin
+Prometheus Targets: http://localhost:9090
+Producer Health: http://localhost:8080/actuator/health
+Consumer Metrics: http://localhost:8081/actuator/prometheus
+
+
+Kafka Topic: The system uses the topic user-activities.
+
+Data Persistence: Docker volumes are configured to persist Grafana dashboards and Kafka data. To reset everything, run docker-compose down -v.
