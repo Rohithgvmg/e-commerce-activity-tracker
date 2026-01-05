@@ -1,0 +1,88 @@
+
+
+services:
+  # ----------------------------
+  # 1. KAFKA (KRaft Mode - No Zookeeper)
+  # ----------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    hostname: kafka
+    container_name: kafka
+    ports:
+      - "9092:9092" # External access (Host -> Kafka)
+    environment:
+      # KRaft Settings
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      # Listeners (Internal & External)
+      # 29092: Internal (Producer -> Kafka)
+      # 9092: External (Host/Browser -> Kafka)
+      # 29093: Controller (Kafka internals)
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_NUM_PARTITIONS: 3
+      # Magic formatting to bypass "cluster ID" error in KRaft
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+
+  # ----------------------------
+  # 2. PRODUCER SERVICE
+  # ----------------------------
+  producer-service:
+    build: ./producer-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      - kafka
+    environment:
+      # Producer talks to "kafka" on the internal port 29092
+      BOOTSTRAP_SERVERS: kafka:29092
+
+  # ----------------------------
+  # 3. FRONTEND APP
+  # ----------------------------
+  frontend-app:
+    build: ./frontend
+    ports:
+      - "5173:5173"  # Vite Port
+    environment:
+      REACT_APP_API_URL: http://localhost:8080
+    stdin_open: true
+    tty: true
+
+  consumer-service:
+    build: ./consumer-service
+    ports:
+      - "8081:8081" # Map to 8081 to avoid conflict with Producer (8080)
+    depends_on:
+      - kafka
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+
+    # 2. NEW: Prometheus (The Database)
+  prometheus:
+      image: prom/prometheus:latest
+      ports:
+        - "9090:9090"
+      volumes:
+        - ./prometheus.yml:/etc/prometheus/prometheus.yml # Mount our config
+      command:
+        - '--config.file=/etc/prometheus/prometheus.yml'
+
+    # 3. NEW: Grafana (The Dashboard)
+  grafana:
+      image: grafana/grafana:latest
+      ports:
+        - "3000:3000"
+      environment:
+        - GF_SECURITY_ADMIN_PASSWORD=admin # Default password
+      depends_on:
+        - prometheus
